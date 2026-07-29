@@ -5,7 +5,7 @@ One-command installer for [TunGuard](https://github.com/TunGuard/tanguard-binary
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/installer.sh | bash
 ```
 
 The script will:
@@ -27,7 +27,7 @@ TunGuard is a self-contained WireGuard server that runs entirely in userspace â€
 
 ```bash
 # Install
-curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/installer.sh | bash
 
 # Run manually (if not using systemd)
 sudo tanguard -web
