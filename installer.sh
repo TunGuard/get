@@ -75,10 +75,13 @@ echo "✓ TunGuard installed successfully!"
 echo "Version : $VERSION"
 echo "Binary  : $INSTALL_PATH"
 
-# Ask about systemd service
+# Ask about systemd service (read from /dev/tty to work with pipe installs)
 echo
-read -p "Set up as a systemd service? [Y/n] " -n 1 -r REPLY
-echo
+REPLY=y
+if [ -t 0 ]; then
+    read -p "Set up as a systemd service? [Y/n] " -n 1 -r REPLY </dev/tty
+    echo
+fi
 if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     $SUDO mkdir -p "$DATA_DIR"
 
