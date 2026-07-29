@@ -49,9 +49,10 @@ esac
 
 echo "Fetching latest release..."
 
-VERSION=$(curl -fsSL "https://api.github.com/repos/${BINARY_REPO}/releases/latest" \
-    | grep -m1 '"tag_name"' \
-    | cut -d '"' -f4 || true)
+TMP_JSON="$(mktemp)"
+curl -fsSL "https://api.github.com/repos/${BINARY_REPO}/releases/latest" -o "$TMP_JSON"
+VERSION=$(grep -m1 '"tag_name"' "$TMP_JSON" | cut -d '"' -f4)
+rm -f "$TMP_JSON"
 
 if [ -z "$VERSION" ]; then
     echo "Failed to determine the latest release."
