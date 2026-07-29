@@ -51,7 +51,7 @@ echo "Fetching latest release..."
 
 VERSION=$(curl -fsSL "https://api.github.com/repos/${BINARY_REPO}/releases/latest" \
     | grep -m1 '"tag_name"' \
-    | cut -d '"' -f4)
+    | cut -d '"' -f4 || true)
 
 if [ -z "$VERSION" ]; then
     echo "Failed to determine the latest release."
