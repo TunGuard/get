@@ -12,7 +12,17 @@ The script will:
 1. Detect your OS and architecture (linux/amd64, arm64, or 386)
 2. Download the latest release binary from GitHub
 3. Install it to `/usr/local/bin/tanguard`
-4. Optionally set up a systemd service to run automatically on boot
+4. Set up a systemd service to run automatically on boot
+
+The web dashboard and SSH gateway are **disabled by default**. During installation you'll be asked whether you want to enable them:
+
+```text
+Set up as a systemd service? [Y/n] 
+Enable the web dashboard? [y/N]    # default: No
+Enable the SSH gateway (jump host)? [y/N]  # default: No
+```
+
+Answer `y` to any option you want enabled. You can always enable them later by editing the service file (see below).
 
 ## What is TunGuard?
 
@@ -30,6 +40,9 @@ TunGuard is a self-contained WireGuard server that runs entirely in userspace â€
 curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/installer.sh | bash
 
 # Run manually (if not using systemd)
+sudo tanguard
+
+# With the web dashboard:
 sudo tanguard -web
 
 # Open http://yourserver:9000

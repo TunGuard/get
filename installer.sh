@@ -86,14 +86,63 @@ fi
 if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     $SUDO mkdir -p "$DATA_DIR"
 
-    $SUDO tee "$SERVICE_PATH" > /dev/null <<'SERVICEEOF'
+    # The web dashboard is disabled by default. Let the user opt in.
+    WEB_ENABLED="no"
+    if [ -t 0 ]; then
+        echo
+        read -p "Enable the web dashboard? [y/N] " -n 1 -r WEB_REPLY </dev/tty
+        echo
+    fi
+    if [[ $WEB_REPLY =~ ^[Yy]$ ]]; then
+        WEB_ENABLED="yes"
+    fi
+
+    SSH_ENABLED="no"
+    if [ -t 0 ]; then
+        read -p "Enable the SSH gateway (jump host)? [y/N] " -n 1 -r SSH_REPLY </dev/tty
+        echo
+    fi
+    if [[ $SSH_REPLY =~ ^[Yy]$ ]]; then
+        SSH_ENABLED="yes"
+    fi
+
+    EXEC_ARGS=""
+    if [ "$WEB_ENABLED" = "yes" ]; then
+        EXEC_ARGS="$EXEC_ARGS -web"
+    fi
+    if [ "$SSH_ENABLED" = "yes" ]; then
+        EXEC_ARGS="$EXEC_ARGS -ssh"
+    fi
+    EXEC_ARGS="${EXEC_ARGS# }"
+
+    SERVICE_DESC="TunGuard - Userspace WireGuard Engine"
+    if [ "$WEB_ENABLED" = "yes" ]; then
+        SERVICE_DESC="$SERVICE_DESC with Web UI"
+    fi
+    if [ "$SSH_ENABLED" = "yes" ]; then
+        SERVICE_DESC="$SERVICE_DESC & SSH Gateway"
+    fi
+
+    WEB_ENV=""
+    if [ "$WEB_ENABLED" = "yes" ]; then
+        WEB_ENV="Environment=WEB_USERNAME=admin
+Environment=WEB_PASSWORD=tanguard"
+    fi
+
+    SSH_ENV=""
+    if [ "$SSH_ENABLED" = "yes" ]; then
+        SSH_ENV="Environment=SSH_USER=tanguard
+Environment=SSH_PASSWORD=tanguard"
+    fi
+
+    $SUDO tee "$SERVICE_PATH" > /dev/null <<SERVICEEOF
 [Unit]
-Description=TunGuard - Userspace WireGuard Engine with Web UI & SSH Gateway
+Description=$SERVICE_DESC
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/tanguard -web -ssh
+ExecStart=/usr/local/bin/tanguard${EXEC_ARGS:+ $EXEC_ARGS}
 WorkingDirectory=/var/lib/tanguard
 Restart=always
 RestartSec=5
@@ -101,11 +150,8 @@ Environment=DATA_DIR=/var/lib/tanguard
 Environment=WG_LISTEN_PORT=13231
 Environment=WG_ADDRESS=10.100.0.1/24
 Environment=API_LISTEN=:9000
-Environment=WEB_USERNAME=admin
-Environment=WEB_PASSWORD=tanguard
-Environment=SSH_USER=tanguard
-Environment=SSH_PASSWORD=tanguard
-
+$WEB_ENV
+$SSH_ENV
 NoNewPrivileges=false
 ProtectSystem=false
 
@@ -125,8 +171,14 @@ fi
 
 echo
 echo "Quick start:"
-echo "  Web UI:   http://yourserver:9000"
-echo "  Login:    admin / tanguard"
-echo "  Config:   edit /etc/systemd/system/tanguard.service"
+if [ "$WEB_ENABLED" = "yes" ]; then
+    echo "  Web UI:   http://yourserver:9000"
+    echo "  Login:    admin / tanguard"
+else
+    echo "  The web dashboard is disabled by default."
+    echo "  To enable it, add -web to ExecStart in $SERVICE_PATH, then:"
+    echo "    sudo systemctl daemon-reload && sudo systemctl restart tanguard"
+fi
+echo "  Config:   edit $SERVICE_PATH"
 echo
 echo "Need help? https://github.com/TunGuard/tanguard-binary"
