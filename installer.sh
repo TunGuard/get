@@ -67,6 +67,20 @@ echo "Downloading ${FILE} (${VERSION})..."
 
 curl -fL "$DOWNLOAD_URL" -o "$TMP_FILE"
 
+# Safety net: keep a copy of the user's data before touching anything.
+# The installer never modifies DATA_DIR, but this protects against accidents.
+if $SUDO test -d "$DATA_DIR"; then
+    BK_TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+    BACKUP_FILE="/var/backups/tanguard-${BK_TIMESTAMP}.tar.gz"
+    if $SUDO mkdir -p /var/backups 2>/dev/null; then
+        if $SUDO tar -czf "$BACKUP_FILE" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")" 2>/dev/null; then
+            echo "✓ Data safety backup saved to $BACKUP_FILE"
+        else
+            echo "Note: could not create a data backup (skipped)."
+        fi
+    fi
+fi
+
 $SUDO install -m 755 "$TMP_FILE" "$INSTALL_PATH"
 
 rm -f "$TMP_FILE"
@@ -76,7 +90,21 @@ echo "✓ TunGuard installed successfully!"
 echo "Version : $VERSION"
 echo "Binary  : $INSTALL_PATH"
 
-# Ask about systemd service (read from /dev/tty to work with pipe installs)
+# Update path: never touch an existing service configuration or user data.
+if $SUDO test -f "$SERVICE_PATH"; then
+    echo
+    echo "Existing service configuration found at $SERVICE_PATH."
+    echo "Keeping it unchanged — the update only replaced the binary. Your peers, keys, and dashboard login are preserved."
+    echo
+    $SUDO systemctl daemon-reload
+    $SUDO systemctl restart tanguard || true
+    echo "✓ tanguard service restarted."
+    echo
+    $SUDO systemctl status tanguard --no-pager || true
+    exit 0
+fi
+
+# Fresh install: ask about systemd service (read from /dev/tty to work with pipe installs)
 echo
 REPLY=y
 if [ -t 0 ]; then

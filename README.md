@@ -10,11 +10,21 @@ curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/installer.sh | ba
 
 The script will:
 1. Detect your OS and architecture (linux/amd64, arm64, or 386)
-2. Download the latest release binary from GitHub
-3. Install it to `/usr/local/bin/tanguard`
-4. Set up a systemd service to run automatically on boot
+2. Save a safety backup of your data (if any) to `/var/backups/`
+3. Download the latest release binary from GitHub
+4. Install it to `/usr/local/bin/tanguard`
+5. On a **fresh install**, set up a systemd service to run automatically on boot
 
-The web dashboard and SSH gateway are **disabled by default**. During installation you'll be asked whether you want to enable them:
+## Updating (safe, nothing breaks)
+
+Re-run the same install command to update. The update is **code-only**:
+
+- **Your data is never touched.** Peers, the server key, dashboard login, and SSH host key live in `/var/lib/tanguard` and the installer never modifies that directory.
+- **Your service configuration is preserved.** If `/etc/systemd/system/tanguard.service` already exists, the installer keeps it byte-for-byte — custom ports, subnets, and credentials stay exactly as you set them. The service is simply restarted with the new binary.
+- **A safety backup** of your data is saved to `/var/backups/tanguard-<timestamp>.tar.gz` before each install.
+- Restoring existing peers and keys works automatically because the app reads them from `DATA_DIR` on startup. You can also download/restore a full backup from the web dashboard (Settings → Backup & Restore).
+
+The web dashboard and SSH gateway are **disabled by default**. During a fresh install you'll be asked whether you want to enable them:
 
 ```text
 Set up as a systemd service? [Y/n] 
