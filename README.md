@@ -10,8 +10,9 @@ curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/installer.sh | ba
 
 # Install TunGuard client
 
+```
 curl -fsSL https://raw.githubusercontent.com/TunGuard/get/main/client.sh | bash
-
+```
 The script will:
 1. Detect your OS and architecture (linux/amd64, arm64, or 386)
 2. Save a safety backup of your data (if any) to `/var/backups/`
