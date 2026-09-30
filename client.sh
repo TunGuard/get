@@ -98,7 +98,8 @@ else
     case "${OS}" in
 
         linux)
-            INSTALL_DIR="${HOME}/.local/bin"
+            # Linux TunGuard runs as a system daemon.
+            INSTALL_DIR="/usr/local/bin"
             ;;
 
         darwin)
@@ -110,6 +111,18 @@ else
             ;;
 
     esac
+
+fi
+
+# ------------------------------------------------------------
+# Linux requires root because the service is system-wide.
+# ------------------------------------------------------------
+
+if [ "${PLATFORM}" = "desktop" ] &&
+   [ "${OS}" = "linux" ] &&
+   [ "$(id -u)" -ne 0 ]; then
+
+    die "Linux installation must be run as root. Try: sudo bash install.sh"
 
 fi
 
@@ -275,15 +288,19 @@ echo "Checksum OK."
 mkdir -p "${INSTALL_DIR}"
 
 # ------------------------------------------------------------
-# Windows binaries use .exe
+# Binary paths
 # ------------------------------------------------------------
 
 if [ "${PLATFORM}" = "windows" ]; then
+
     VERSIONED_BINARY="${INSTALL_DIR}/tun-${VERSION}.exe"
     SYMLINK="${INSTALL_DIR}/tun.exe"
+
 else
+
     VERSIONED_BINARY="${INSTALL_DIR}/tun-${VERSION}"
     SYMLINK="${INSTALL_DIR}/${BINARY_NAME}"
+
 fi
 
 # ------------------------------------------------------------
@@ -305,7 +322,6 @@ fi
 # Create/update executable link
 #
 # Windows does not use the Unix symlink approach here.
-# A small launcher is created instead.
 # ------------------------------------------------------------
 
 if [ "${PLATFORM}" = "windows" ]; then
@@ -325,79 +341,141 @@ fi
 
 echo "Binary installed."
 
-# ------------------------------------------------------------
-# Linux systemd user service
-# ------------------------------------------------------------
+# ============================================================
+# Linux systemd service
+# ============================================================
 
 setup_linux_service() {
 
     command -v systemctl >/dev/null 2>&1 ||
         die "systemctl is required to configure the Linux service"
 
-    command -v loginctl >/dev/null 2>&1 ||
-        die "loginctl is required to configure the Linux service"
+    SERVICE_FILE="/etc/systemd/system/tun.service"
 
-    SERVICE_DIR="${HOME}/.config/systemd/user"
-    SERVICE_FILE="${SERVICE_DIR}/tunguard.service"
+    echo
+    echo "Configuring Linux system service..."
 
-    mkdir -p "${SERVICE_DIR}"
+    # --------------------------------------------------------
+    # Create systemd service
+    # --------------------------------------------------------
 
     cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=TunGuard Server
-After=network-online.target
+Description=TunGuard Client
+Documentation=https://tunguard.github.io/docs/guides/client/
 Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
+
 ExecStart=${SYMLINK}
+
 Restart=always
 RestartSec=5
 
+# Allow TunGuard time to shut down cleanly.
+TimeoutStopSec=10
+
+# Never permanently disable the service because of
+# repeated crashes.
+StartLimitIntervalSec=0
+
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 EOF
 
+    chmod 644 "${SERVICE_FILE}"
+
+    # --------------------------------------------------------
+    # Reload systemd configuration
+    # --------------------------------------------------------
+
+    echo "Reloading systemd..."
+
+    systemctl daemon-reload
+
+    # --------------------------------------------------------
+    # Enable service for boot
+    # --------------------------------------------------------
+
+    echo "Enabling tun.service..."
+
+    systemctl enable tun.service
+
+    # --------------------------------------------------------
+    # Stop currently running instance if present.
+    # --------------------------------------------------------
+
+    echo "Stopping previous TunGuard instance..."
+
+    systemctl stop tun.service 2>/dev/null || true
+
+    # --------------------------------------------------------
+    # Start current version
+    # --------------------------------------------------------
+
+    echo "Starting TunGuard..."
+
+    systemctl start tun.service
+
+    # --------------------------------------------------------
+    # Verify service started
+    # --------------------------------------------------------
+
+    sleep 1
+
+    if ! systemctl is-active --quiet tun.service; then
+
+        echo
+        echo "TunGuard failed to start."
+        echo
+        echo "Service status:"
+        systemctl status tun.service --no-pager || true
+
+        echo
+        echo "Recent logs:"
+        journalctl -u tun.service -n 30 --no-pager || true
+
+        exit 1
+
+    fi
+
     echo
-    echo "Configuring Linux startup..."
-
-    systemctl --user daemon-reload
-
-    systemctl --user enable tunguard.service
-
-    # Enable user services to start after system reboot
-    # even before the user opens a shell.
-    loginctl enable-linger "$(id -un)" 2>/dev/null || true
-
-    # Stop an old instance if one exists.
-    systemctl --user stop tunguard.service 2>/dev/null || true
-
-    # Start the newly installed version.
-    systemctl --user start tunguard.service
-
-    echo "Linux service enabled."
+    echo "Linux system service configured successfully."
     echo
     echo "TunGuard will:"
     echo "  - start automatically after reboot"
     echo "  - restart automatically if it exits"
+    echo "  - run without a logged-in user"
+    echo "  - restart 5 seconds after an unexpected exit"
     echo
     echo "Service:"
-    echo "  systemctl --user status tunguard"
+    echo "  systemctl status tun"
+    echo
+    echo "Start:"
+    echo "  systemctl start tun"
+    echo
+    echo "Stop:"
+    echo "  systemctl stop tun"
+    echo
+    echo "Restart:"
+    echo "  systemctl restart tun"
     echo
     echo "Logs:"
-    echo "  journalctl --user -u tunguard -f"
+    echo "  journalctl -u tun -f"
 }
 
-# ------------------------------------------------------------
+# ============================================================
 # Termux startup
 #
 # Requires Termux:Boot to be installed.
-# ------------------------------------------------------------
+# ============================================================
 
 setup_termux_boot() {
 
     BOOT_DIR="${HOME}/.termux/boot"
-    BOOT_SCRIPT="${BOOT_DIR}/tunguard"
+    BOOT_SCRIPT="${BOOT_DIR}/tun"
 
     mkdir -p "${BOOT_DIR}"
 
@@ -414,6 +492,7 @@ EOF
     echo
     echo "Configuring Termux startup..."
 
+    echo
     echo "Termux startup script:"
     echo "  ${BOOT_SCRIPT}"
 
@@ -428,11 +507,12 @@ EOF
     echo "Important:"
     echo "Install the Termux:Boot Android app and allow Termux"
     echo "to run in the background."
+
 }
 
-# ------------------------------------------------------------
+# ============================================================
 # macOS launchd service
-# ------------------------------------------------------------
+# ============================================================
 
 setup_macos_service() {
 
@@ -477,10 +557,16 @@ EOF
     echo
     echo "Configuring macOS startup..."
 
-    launchctl bootout "gui/$(id -u)" "${PLIST_FILE}" 2>/dev/null || true
+    launchctl bootout \
+        "gui/$(id -u)" \
+        "${PLIST_FILE}" \
+        2>/dev/null || true
 
-    launchctl bootstrap "gui/$(id -u)" "${PLIST_FILE}"
+    launchctl bootstrap \
+        "gui/$(id -u)" \
+        "${PLIST_FILE}"
 
+    echo
     echo "macOS startup service enabled."
 
     echo
@@ -493,11 +579,11 @@ EOF
     echo "  ${HOME}/tunguard-error.log"
 }
 
-# ------------------------------------------------------------
+# ============================================================
 # Windows Scheduled Task
 #
 # Intended for Git Bash / MSYS environments.
-# ------------------------------------------------------------
+# ============================================================
 
 setup_windows_startup() {
 
@@ -514,12 +600,18 @@ setup_windows_startup() {
     echo
     echo "Configuring Windows startup..."
 
-    # Remove previous task if it exists.
+    # --------------------------------------------------------
+    # Remove previous task
+    # --------------------------------------------------------
+
     schtasks.exe /Delete \
         /TN "${TASK_NAME}" \
         /F >/dev/null 2>&1 || true
 
-    # Start when Windows starts.
+    # --------------------------------------------------------
+    # Create startup task
+    # --------------------------------------------------------
+
     schtasks.exe /Create \
         /TN "${TASK_NAME}" \
         /TR "\"${WINDOWS_BINARY}\"" \
@@ -528,6 +620,7 @@ setup_windows_startup() {
         /RL HIGHEST \
         /F >/dev/null
 
+    echo
     echo "Windows startup task created."
 
     echo
@@ -543,13 +636,9 @@ setup_windows_startup() {
     echo "  schtasks.exe /End /TN \"${TASK_NAME}\""
 }
 
-# ------------------------------------------------------------
+# ============================================================
 # Android without Termux
-#
-# A normal Android shell does not provide systemd or
-# Termux:Boot, so automatic boot registration is not
-# possible from this installer alone.
-# ------------------------------------------------------------
+# ============================================================
 
 setup_android() {
 
@@ -566,9 +655,9 @@ setup_android() {
 
 }
 
-# ------------------------------------------------------------
+# ============================================================
 # Configure startup according to platform
-# ------------------------------------------------------------
+# ============================================================
 
 case "${PLATFORM}" in
 
@@ -614,9 +703,9 @@ case "${PLATFORM}" in
 
 esac
 
-# ------------------------------------------------------------
+# ============================================================
 # PATH check
-# ------------------------------------------------------------
+# ============================================================
 
 echo
 echo "Checking PATH..."
@@ -637,19 +726,32 @@ case ":${PATH}:" in
         case "${PLATFORM}" in
 
             termux)
+
                 echo "Termux normally includes:"
                 echo "  \$PREFIX/bin"
                 ;;
 
             windows)
+
                 echo "Add this directory to your Windows PATH:"
                 echo "  ${INSTALL_DIR}"
                 ;;
 
-            *)
-                echo "Add this to your shell configuration:"
-                echo
-                echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+            android)
+
+                echo "Android binary location:"
+                echo "  ${INSTALL_DIR}"
+                ;;
+
+            desktop)
+
+                if [ "${OS}" = "linux" ]; then
+                    echo "/usr/local/bin is normally already in PATH."
+                else
+                    echo "Add this to your shell configuration:"
+                    echo
+                    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+                fi
                 ;;
 
         esac
@@ -658,9 +760,9 @@ case ":${PATH}:" in
 
 esac
 
-# ------------------------------------------------------------
+# ============================================================
 # Final output
-# ------------------------------------------------------------
+# ============================================================
 
 echo
 echo "----------------------------------------"
@@ -674,13 +776,17 @@ echo "Binary:"
 echo "  ${VERSIONED_BINARY}"
 
 if [ "${PLATFORM}" = "windows" ]; then
+
     echo
     echo "Command:"
     echo "  ${WINDOWS_COMMAND}"
+
 else
+
     echo
     echo "Command:"
     echo "  ${SYMLINK}"
+
 fi
 
 echo
@@ -690,11 +796,21 @@ case "${PLATFORM}" in
     desktop)
 
         if [ "${OS}" = "linux" ]; then
+
             echo "Startup:"
             echo "  systemd enabled"
+            echo
+            echo "Service:"
+            echo "  tun.service"
+            echo
+            echo "Status:"
+            echo "  systemctl status tun"
+
         elif [ "${OS}" = "darwin" ]; then
+
             echo "Startup:"
             echo "  launchd enabled"
+
         fi
 
         ;;
