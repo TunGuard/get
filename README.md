@@ -93,7 +93,7 @@ sudo systemctl restart tanguard
 | `SSH_USER` | `tanguard` | SSH gateway user |
 | `SSH_PASSWORD` | `tanguard` | SSH gateway pass |
 
-See the full [README](https://github.com/TunGuard/tanguard-binary) for all options.
+See the full [DOCUMENTATION](https://TunGuard.github.io/docs) for all options.
 
 ## Uninstall
 
