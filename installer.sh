@@ -47,26 +47,21 @@ case "$ARCH" in
         ;;
 esac
 
-# TEMPORARY: Pin to stable v2.4.8 while v2.4.13 is being fixed.
-VERSION="v2.4.13"
+echo "Fetching latest release..."
 
-# Fetch latest release (restore after fixing v2.4.13).
-# echo "Fetching latest release..."
-#
-# TMP_JSON="$(mktemp)"
-# curl -fsSL "https://api.github.com/repos/${BINARY_REPO}/releases/latest" -o "$TMP_JSON"
-# VERSION=$(grep -m1 '"tag_name"' "$TMP_JSON" | cut -d '"' -f4)
-# rm -f "$TMP_JSON"
-#
-# if [ -z "$VERSION" ]; then
-#     echo "Failed to determine the latest release."
-#     exit 1
-# fi
+TMP_JSON="$(mktemp)"
+curl -fsSL "https://api.github.com/repos/${BINARY_REPO}/releases/latest" -o "$TMP_JSON"
+VERSION=$(grep -m1 '"tag_name"' "$TMP_JSON" | cut -d '"' -f4)
+rm -f "$TMP_JSON"
+
+if [ -z "$VERSION" ]; then
+    echo "Failed to determine the latest release."
+    exit 1
+fi
 
 DOWNLOAD_URL="https://github.com/${BINARY_REPO}/releases/download/${VERSION}/${FILE}"
 
 TMP_FILE="$(mktemp)"
-trap 'rm -f "$TMP_FILE"' EXIT
 
 echo "Downloading ${FILE} (${VERSION})..."
 
@@ -82,7 +77,7 @@ if $SUDO test -d "$DATA_DIR"; then
         if $SUDO tar -czf "$BACKUP_FILE" \
             -C "$(dirname "$DATA_DIR")" \
             "$(basename "$DATA_DIR")" 2>/dev/null; then
-            echo "Data safety backup saved to $BACKUP_FILE"
+            echo "✓ Data safety backup saved to $BACKUP_FILE"
         else
             echo "Note: could not create a data backup (skipped)."
         fi
@@ -92,10 +87,9 @@ fi
 $SUDO install -m 755 "$TMP_FILE" "$INSTALL_PATH"
 
 rm -f "$TMP_FILE"
-trap - EXIT
 
 echo
-echo "TunGuard installed successfully!"
+echo "✓ TunGuard installed successfully!"
 echo "Version : $VERSION"
 echo "Binary  : $INSTALL_PATH"
 
@@ -103,20 +97,20 @@ echo "Binary  : $INSTALL_PATH"
 if $SUDO test -f "$SERVICE_PATH"; then
     echo
     echo "Existing service configuration found at $SERVICE_PATH."
-    echo "Keeping it unchanged. Peers, keys, dashboard login, and service settings are preserved."
+    echo "Keeping it unchanged — the update only replaced the binary. Your peers, keys, and dashboard login are preserved."
     echo
 
     $SUDO systemctl daemon-reload
     $SUDO systemctl restart tanguard || true
 
-    echo "tanguard service restart attempted."
+    echo "✓ tanguard service restarted."
     echo
     $SUDO systemctl status tanguard --no-pager || true
     exit 0
 fi
 
-# Fresh install: ask about systemd service.
-# Read from /dev/tty to support pipe-based installation.
+# Fresh install: ask about systemd service
+# Read from /dev/tty to work with pipe installs
 echo
 REPLY=y
 
@@ -128,7 +122,7 @@ fi
 if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z "$REPLY" ]]; then
     $SUDO mkdir -p "$DATA_DIR"
 
-    $SUDO tee "$SERVICE_PATH" >/dev/null <<'SERVICEEOF'
+    $SUDO tee "$SERVICE_PATH" > /dev/null <<'SERVICEEOF'
 [Unit]
 Description=TunGuard - Userspace WireGuard Engine with Web UI & SSH Gateway
 After=network.target
@@ -160,7 +154,7 @@ SERVICEEOF
     $SUDO systemctl start tanguard
 
     echo
-    echo "systemd service installed and started!"
+    echo "✓ systemd service installed and started!"
     echo
     $SUDO systemctl status tanguard --no-pager
 fi
