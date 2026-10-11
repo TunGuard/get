@@ -48,7 +48,7 @@ case "$ARCH" in
 esac
 
 # TEMPORARY: Pin to stable v2.4.8 while v2.4.13 is being fixed.
-VERSION="v2.4.8"
+VERSION="v2.4.11"
 
 # Fetch latest release (restore after fixing v2.4.13).
 # echo "Fetching latest release..."
